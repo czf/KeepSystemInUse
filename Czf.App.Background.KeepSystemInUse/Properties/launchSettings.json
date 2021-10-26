@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Czf.App.Background.KeepSystemInUse": {
+      "commandName": "Project",
+      "commandLineArgs": "1"
+    }
+  }
+}
