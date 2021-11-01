@@ -1,13 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <ApplicationIcon />
     <StartupObject />
 	  <PackAsTool>true</PackAsTool>
 	  <ToolCommandName>keepinuse</ToolCommandName>
 	  <PackageOutputPath>./nupkg</PackageOutputPath>
+	  <Version>1.1.0-service</Version>
+	  <RepositoryUrl>https://github.com/czf/KeepSystemInUse</RepositoryUrl>
+	  <PackageProjectUrl>https://github.com/czf/KeepSystemInUse</PackageProjectUrl>
+	  <Description>tool to tell the OS it is in use</Description>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -20,6 +24,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="5.0.1" />
     <PackageReference Include="System.Reactive" Version="5.0.0" />
+    <PackageReference Include="Topshelf" Version="4.3.0" />
   </ItemGroup>
 
 </Project>

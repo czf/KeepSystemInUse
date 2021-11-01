@@ -1,21 +1,97 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging;
+using Topshelf;
+using Host = Microsoft.Extensions.Hosting.Host;
 
 namespace Czf.App.Background.KeepSystemInUse
 {
     class Program
     {
+        static ILogger<Program> logger;
+        static int? waitValue;
         static async Task Main(string[] args)
         {
-            int minutes = args.Length < 1 ? 7 : int.Parse(args[0]);
+            var factory = LoggerFactory.Create(x => x.AddEventLog());
+            logger = factory.CreateLogger<Program>();
 
+            //StringBuilder sb = new StringBuilder();
+            //foreach (var item in args)
+            //{
+            //    sb.AppendLine(item);
+            //}
+
+            //logger.LogInformation(sb.ToString());
+
+            var configRoot = new ConfigurationBuilder().AddCommandLine(args).Build();
+            var serviceValue = configRoot.GetValue<string>("service");
+            if (!string.IsNullOrEmpty(serviceValue) || (args.Contains("-servicename") && args.Contains("-displayname")))
+            {
+                var code = HostFactory.New(x =>
+                {
+                    x.Service<KeepSystemInUseService>(s =>
+                    {
+                        int waitMinutes = waitValue ?? configRoot.GetValue<int?>("wait") ?? 7;
+                        ApplicationLifetime applicationLifetime = new ApplicationLifetime(null);
+                        s.ConstructUsing(n => new KeepSystemInUseService(applicationLifetime, waitMinutes, DefaultScheduler.Instance));
+                        s.WhenStarted(y =>
+                        {
+                            y.StartAsync(applicationLifetime.ApplicationStopped);
+                        });
+                        s.WhenStopped(z => applicationLifetime.StopApplication());
+                    });
+                    x.StartAutomaticallyDelayed();
+                //    x.AddCommandLineDefinition("wait", y => { waitValue = int.Parse(y); logger.LogInformation("command "+ y); });
+                
+                    switch (serviceValue?.ToLowerInvariant())
+                    {
+                        case "install":
+                            x.ApplyCommandLine("install");
+                            break;
+                        case "uninstall":
+                            x.ApplyCommandLine("uninstall");
+                            break;
+                        case "start":
+                            //string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                            //Directory.SetCurrentDirectory(path);
+                            int waitMinutes = configRoot.GetValue<int?>("wait") ?? 10;
+
+                            x.ApplyCommandLine($"start");
+                            break;
+                        case "stop":
+                            x.ApplyCommandLine("stop");
+                            break;
+                        case null:
+                            break;
+                        default:
+                            throw new NotSupportedException("do not support that value");
+                    }
+                    x.RunAsLocalService();
+                    x.SetDescription("Tells the OS to think its in use.");
+                    x.SetDisplayName("Czf.App.Background.KeepSystemInUse");
+                    x.SetServiceName("Czf.App.Background.KeepSystemInUse");
+                    
+
+                }).Run();
+                var exitCode = (int)Convert.ChangeType(code, code.GetTypeCode());
+                Environment.ExitCode = exitCode;
+                return;
+            }
+
+            
+            
             await CreateHostBuilder(args)
                 .UseWindowsService(o =>
                 {
@@ -24,11 +100,14 @@ namespace Czf.App.Background.KeepSystemInUse
                 .ConfigureServices((hostContext, services) =>
                 {
                     var config = hostContext.Configuration;
+                    int waitMinutes = config.GetValue<int?>("wait") ?? 7;
                     services.AddOptions();
-                    services.AddHostedService(x => new KeepSystemInUseService(x.GetRequiredService<IHostApplicationLifetime>(), minutes, DefaultScheduler.Instance));
+                    services.AddHostedService(x => new KeepSystemInUseService(x.GetRequiredService<IHostApplicationLifetime>(), waitMinutes, DefaultScheduler.Instance));
                 })
                 .RunConsoleAsync();
         }
+
+
         static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((hostingContext, config) =>
@@ -55,6 +134,7 @@ namespace Czf.App.Background.KeepSystemInUse
                 _intervalMinutes = intervalMinutes;
                 _scheduler = scheduler;
                 _linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_applicationLifetime.ApplicationStopping, _applicationLifetime.ApplicationStopped);
+                logger.LogInformation($"wait: {intervalMinutes}");
             }
 
             public Task StartAsync(CancellationToken cancellationToken)
@@ -74,7 +154,7 @@ namespace Czf.App.Background.KeepSystemInUse
 
             public void OnError(Exception e)
             {
-                Console.Error.WriteLine($"exception: {e.Message}");
+                logger.LogError(e,"Observable exception");
                 _applicationLifetime.StopApplication();
             }
             public Task StopAsync(CancellationToken cancellationToken)
