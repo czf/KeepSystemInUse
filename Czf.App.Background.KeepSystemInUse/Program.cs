@@ -53,7 +53,6 @@ namespace Czf.App.Background.KeepSystemInUse
                         s.WhenStopped(z => applicationLifetime.StopApplication());
                     });
                     x.StartAutomaticallyDelayed();
-                //    x.AddCommandLineDefinition("wait", y => { waitValue = int.Parse(y); logger.LogInformation("command "+ y); });
                 
                     switch (serviceValue?.ToLowerInvariant())
                     {
@@ -64,10 +63,7 @@ namespace Czf.App.Background.KeepSystemInUse
                             x.ApplyCommandLine("uninstall");
                             break;
                         case "start":
-                            //string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                            //Directory.SetCurrentDirectory(path);
-                            int waitMinutes = configRoot.GetValue<int?>("wait") ?? 10;
-
+                            int waitMinutes = configRoot.GetValue<int?>("wait") ?? 10;//doesn't do anything
                             x.ApplyCommandLine($"start");
                             break;
                         case "stop":
@@ -78,7 +74,7 @@ namespace Czf.App.Background.KeepSystemInUse
                         default:
                             throw new NotSupportedException("do not support that value");
                     }
-                    x.RunAsLocalService();
+                    //x.RunAsLocalSystem();//just to get it installed
                     x.SetDescription("Tells the OS to think its in use.");
                     x.SetDisplayName("Czf.App.Background.KeepSystemInUse");
                     x.SetServiceName("Czf.App.Background.KeepSystemInUse");
