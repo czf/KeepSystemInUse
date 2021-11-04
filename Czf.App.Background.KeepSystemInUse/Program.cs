@@ -145,7 +145,20 @@ namespace Czf.App.Background.KeepSystemInUse
 
             public void OnNext(long _)
             {
-                SetThreadExecutionState(EXECUTION_STATE.ES_DISPLAY_REQUIRED | EXECUTION_STATE.ES_CONTINUOUS);
+                var previousState = SetThreadExecutionState(EXECUTION_STATE.ES_DISPLAY_REQUIRED | EXECUTION_STATE.ES_CONTINUOUS);
+                
+                if(previousState == 0)
+                {
+                    logger.LogError("SetThreadExecutionState result was NULL");
+                }
+                else if (previousState.HasFlag(EXECUTION_STATE.ES_DISPLAY_REQUIRED))
+                {
+                    logger.LogInformation("previous state has display required, thread id:" + Thread.CurrentThread.ManagedThreadId.ToString());
+                }
+                else
+                {
+                    logger.LogInformation("previous state didn't have display required, thread id:" + Thread.CurrentThread.ManagedThreadId.ToString());
+                }
             }
 
             public void OnError(Exception e)
