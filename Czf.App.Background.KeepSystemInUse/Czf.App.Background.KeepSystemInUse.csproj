@@ -2,14 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
 	  
     <ApplicationIcon />
     <StartupObject />
 	  <PackAsTool>true</PackAsTool>
 	  <ToolCommandName>keepinuse</ToolCommandName>
 	  <PackageOutputPath>./nupkg</PackageOutputPath>
-	  <Version>1.1.0-service-211114b</Version>
+	  <Version>1.1.0-service-211115</Version>
 	  <RepositoryUrl>https://github.com/czf/KeepSystemInUse</RepositoryUrl>
 	  <PackageProjectUrl>https://github.com/czf/KeepSystemInUse</PackageProjectUrl>
 	  <Description>tool to tell the OS it is in use</Description>

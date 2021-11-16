@@ -10,7 +10,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using File = System.IO.File;
 using Host = Microsoft.Extensions.Hosting.Host;
 
 namespace Czf.App.Background.KeepSystemInUse
@@ -43,18 +42,9 @@ namespace Czf.App.Background.KeepSystemInUse
 
         private static void CreateStartupShortcut()
         {
-            var dotNetCliPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) + "\\dotnet\\dotnet.exe";
-
-
-            if (File.Exists(dotNetCliPath))
-            {
-                var startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                CreateShortcut(Process.GetCurrentProcess().ProcessName, startupPath, CLI_COMMAND_NAME);
-            }
-            else
-            {
-                Console.Error.WriteLine("Couldn't find dotnet.exe, can't create startup shortcut");
-            }
+            var startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            CreateShortcut(Process.GetCurrentProcess().ProcessName, startupPath, CLI_COMMAND_NAME);
+            Console.WriteLine("shortcut added to startup folder.");
         }
 
         static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -84,7 +74,7 @@ namespace Czf.App.Background.KeepSystemInUse
             SemaphoreSlim _wait;
             private CancellationTokenSource _linkedTokenSource;
             private IHostApplicationLifetime _applicationLifetime;
-            private Task _inUseTask;
+            private Thread _inUseThread;
             public KeepSystemInUseService(IHostApplicationLifetime applicationLifetime )
             {
                 _applicationLifetime = applicationLifetime;
@@ -103,16 +93,16 @@ namespace Czf.App.Background.KeepSystemInUse
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    _inUseTask = Task.Run(LongRunningAction);
-                    
+                    _inUseThread = new Thread(LongRunningAction);
+                    _inUseThread.Start();
                 }
                 return Task.CompletedTask;
             }
 
-            private Task LongRunningAction()
+            private void LongRunningAction()
             {
                 SetThreadExecutionState(EXECUTION_STATE.ES_DISPLAY_REQUIRED | EXECUTION_STATE.ES_CONTINUOUS);
-                return _wait.WaitAsync();
+                _wait.Wait();
             }
 
             public Task StopAsync(CancellationToken cancellationToken)
