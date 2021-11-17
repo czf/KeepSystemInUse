@@ -2,7 +2,7 @@
   "profiles": {
     "Czf.App.Background.KeepSystemInUse": {
       "commandName": "Project",
-      "commandLineArgs": "1"
+      "commandLineArgs": "--service=start --wait=1"
     }
   }
 }

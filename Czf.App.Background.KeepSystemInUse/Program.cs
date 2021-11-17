@@ -1,34 +1,52 @@
 ﻿using System;
-using System.Reactive.Concurrency;
-using System.Reactive.Linq;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using IWshRuntimeLibrary;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Host = Microsoft.Extensions.Hosting.Host;
 
 namespace Czf.App.Background.KeepSystemInUse
 {
     class Program
     {
+        const string CLI_COMMAND_NAME = "keepinuse";
+        static ILogger<Program> logger;
         static async Task Main(string[] args)
         {
-            int minutes = args.Length < 1 ? 7 : int.Parse(args[0]);
+            var factory = LoggerFactory.Create(x => x.AddEventLog());
+            logger = factory.CreateLogger<Program>();
 
+
+            if (args.Contains("--startup"))
+            {
+                CreateStartupShortcut();
+                return;
+            }
             await CreateHostBuilder(args)
-                .UseWindowsService(o =>
-                {
-                    o.ServiceName = "Czf.App.Background.KeepSystemInUse";
-                })
                 .ConfigureServices((hostContext, services) =>
                 {
                     var config = hostContext.Configuration;
+                    
                     services.AddOptions();
-                    services.AddHostedService(x => new KeepSystemInUseService(x.GetRequiredService<IHostApplicationLifetime>(), minutes, DefaultScheduler.Instance));
+                    services.AddHostedService(x => new KeepSystemInUseService(x.GetRequiredService<IHostApplicationLifetime>()));
                 })
                 .RunConsoleAsync();
         }
+
+        private static void CreateStartupShortcut()
+        {
+            var startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            CreateShortcut(Process.GetCurrentProcess().ProcessName, startupPath, CLI_COMMAND_NAME);
+            Console.WriteLine("shortcut added to startup folder.");
+        }
+
         static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((hostingContext, config) =>
@@ -39,52 +57,63 @@ namespace Czf.App.Background.KeepSystemInUse
                 .AddCommandLine(args);
             });
 
+        private static void CreateShortcut(string shortcutName, string shortcutPath, string targetFileLocation)
+        {
+            string shortcutLocation = System.IO.Path.Combine(shortcutPath, shortcutName + ".lnk");
+            WshShell shell = new WshShell();
+            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutLocation);
 
+            shortcut.Description = $"shortcut to {targetFileLocation}";   // The description of the shortcut
+            shortcut.TargetPath = targetFileLocation;                 // The path of the file that will launch when the shortcut is run
+            shortcut.Save();                                    // Save the shortcut
+        }
 
         private class KeepSystemInUseService : IHostedService
         {
             private bool disposedValue;
-            private readonly int _intervalMinutes;
-            private readonly IScheduler _scheduler;
-            private IObservable<long> _intervalObservable;
+            SemaphoreSlim _wait;
             private CancellationTokenSource _linkedTokenSource;
             private IHostApplicationLifetime _applicationLifetime;
-            public KeepSystemInUseService(IHostApplicationLifetime applicationLifetime, int intervalMinutes, IScheduler scheduler)
+            private Thread _inUseThread;
+            public KeepSystemInUseService(IHostApplicationLifetime applicationLifetime )
             {
                 _applicationLifetime = applicationLifetime;
-                _intervalMinutes = intervalMinutes;
-                _scheduler = scheduler;
+                _wait = new SemaphoreSlim(0,1);
+                
                 _linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_applicationLifetime.ApplicationStopping, _applicationLifetime.ApplicationStopped);
+                _linkedTokenSource.Token.Register(ContinueWaitSemaphore);
+            }
+
+            private void ContinueWaitSemaphore() 
+            {
+                _wait.Release();
             }
 
             public Task StartAsync(CancellationToken cancellationToken)
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    _intervalObservable = Observable.Interval(TimeSpan.FromMinutes(_intervalMinutes), _scheduler);
-                    _intervalObservable.Subscribe(OnNext,OnError, _linkedTokenSource.Token);
+                    _inUseThread = new Thread(LongRunningAction);
+                    _inUseThread.Start();
                 }
                 return Task.CompletedTask;
             }
 
-            public void OnNext(long _)
+            private void LongRunningAction()
             {
                 SetThreadExecutionState(EXECUTION_STATE.ES_DISPLAY_REQUIRED | EXECUTION_STATE.ES_CONTINUOUS);
+                _wait.Wait();
             }
 
-            public void OnError(Exception e)
-            {
-                Console.Error.WriteLine($"exception: {e.Message}");
-                _applicationLifetime.StopApplication();
-            }
             public Task StopAsync(CancellationToken cancellationToken)
             {
                 try
                 {
-                    SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS);
+                    _wait.Release();
                 }
                 finally
                 {
+                    SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS);
                     _applicationLifetime.StopApplication();
                 }
                 return Task.CompletedTask;
@@ -105,6 +134,7 @@ namespace Czf.App.Background.KeepSystemInUse
                     if (disposing)
                     {
                         _linkedTokenSource.Dispose();
+                        _wait.Dispose();
                     }
 
                     disposedValue = true;
